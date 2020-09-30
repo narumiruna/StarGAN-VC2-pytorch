@@ -138,4 +138,45 @@ def test_generator():
 
     model = Generator(code_dim)
     y = model(x, c)
-    assert len(y.size()) == [batch_size, h, w]
+    assert list(y.size()) == [batch_size, h, w]
+
+
+class Discriminator(nn.Module):
+    def __init__(self, code_dim=8):
+        super(Discriminator, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(1, 128, 3, padding=1),
+            nn.GLU(dim=1),
+            ConvINGLU(64, 256, 3, stride=2, padding=1),
+            ConvINGLU(128, 512, 3, stride=2, padding=1),
+            ConvINGLU(256, 1024, 3, stride=2, padding=1),
+            ConvINGLU(512, 1024, (1, 5), padding=(0, 2)),
+        )
+
+        self.embed = nn.Embedding(code_dim, 512)
+        self.fc = nn.Linear(512, 1)
+
+    def forward(self, x, c):
+        x = x.unsqueeze(1)
+
+        x = self.conv(x)
+        h = x.sum(dim=[2, 3])
+
+        out = self.fc(h)
+        out += torch.sum(self.embed(c) * h, dim=1, keepdim=True)
+
+        return out
+
+
+def test_discriminator():
+    batch_size = 32
+    h = 36
+    w = 128
+    code_dim = 8
+    x = torch.randn(batch_size, h, w)
+    c = torch.randint(low=0, high=code_dim - 1, size=(batch_size, ))
+
+    model = Discriminator()
+    y = model(x, c)
+
+    assert list(y.size()) == [batch_size, 1]
